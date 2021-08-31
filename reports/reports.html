@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (extras.classList.contains("collapsed")) {
+            expandcollapse.classList.add("expander")
+        } else if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    sort_column(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+
+        if (key_a == key_b) return 0;
+
+        if (reversed) {
+            return (key_a < key_b ? 1 : -1);
+        } else {
+            return (key_a > key_b ? 1 : -1);
+        }
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>reports.html</h1>
+    <p>Report generated on 31-Aug-2021 at 17:31:35 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v2.1.1</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Packages</td>
+        <td>{"pluggy": "0.13.1", "py": "1.10.0", "pytest": "6.2.4"}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Windows-10-10.0.19043-SP0</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{"html": "2.1.1", "metadata": "1.11.0"}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.9.6</td></tr></table>
+    <h2>Summary</h2>
+    <p>10 tests ran in 16.01 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">9 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">1 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">tests/test_sortingDataByColumn.py::Test_Validate_TableSorting::test_VelidateSortedData[getData0]</td>
+          <td class="col-duration">0.37</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div><div><img src="screenshots/test_VelidateSortedData.png" alt="screenshot" style="width:304px;height:228px;" onclick="window.open(this.src)" align="right"/></div></div>
+            <div class="log">self = &lt;tests.test_sortingDataByColumn.Test_Validate_TableSorting object at 0x000001DC13EB10D0&gt;<br/>getData = {&#x27;ApplyFilterFlag&#x27;: False, &#x27;DropDown&#x27;: None, &#x27;FilterText&#x27;: None, &#x27;InputText&#x27;: &#x27;a&#x27;, ...}<br/><br/>    def test_VelidateSortedData(self, getData):<br/>        log = self.getLogger()<br/>        hp = HomePage(self.driver)<br/>        actions = Actions(self.driver)<br/>        # Get Filter Flag from input data file!<br/>        checkFilterFlag = getData[&quot;ApplyFilterFlag&quot;]<br/>        if checkFilterFlag:<br/>            # Enter text into the filter data text box<br/>            selectColumnHeader = str(getData[&quot;InputText&quot;])<br/>            log.info(&quot;selectColumnHeader : {}&quot;.format(selectColumnHeader))<br/>            actions.sendKeys(hp.getFilterTextBox(), selectColumnHeader)<br/>            Actions.enterTextInFilterBox(selectColumnHeader, hp.getFilterTextBox())<br/>            webTableBeforeSort = actions.getTableData((hp.getTableData()))<br/>            log.info(&quot;Default webTable data with filter: {}&quot;.format(webTableBeforeSort))<br/>            assert checkWebListLength(<br/>                webTableBeforeSort) == 1, &quot;No data /Only one row found for the for given filter in &quot; \<br/>                                          &quot;input data file! &quot;<br/>        else:<br/>            webTableBeforeSort = actions.getTableData((hp.getTableData()))<br/>            log.info(&quot;Default webTable data without filter: {}&quot;.format(webTableBeforeSort))<br/>            assert checkWebListLength(<br/>                webTableBeforeSort) == 1, &quot;No data /Only one row found for the for given filter in &quot; \<br/>                                          &quot;input data file! &quot;<br/>    <br/>        # Select value from dropdown to sort the WebTable<br/>        selectColumn = str(getData[&quot;SelectColumnForSorting&quot;])<br/>        log.info(&quot;selectColumn: {}&quot;.format(selectColumn))<br/>        element = hp.selectDropDownsElement()<br/>        actions.columnSelectToSort(selectColumn, element)<br/>    <br/>        # Get all the Table header in list<br/>        listOfTableHeader = actions.getTableHeader(hp.getTableHeader())<br/>        log.info(&quot;WebTable headers: {}&quot;.format(listOfTableHeader))<br/>    <br/>        # Get the index value of the column selected from dropdown<br/>        getSortedColumnIndex = getIndexColumn(listOfTableHeader, selectColumn)<br/>        log.info(&quot;get Sorted Column Index: {}&quot;.format(getSortedColumnIndex))<br/>    <br/>        # Sorted the default data without dropdown selection<br/>        defaultDataSorted = selectSortingMethod(selectColumn, webTableBeforeSort, getSortedColumnIndex)<br/>        log.info(&quot;get default data after sort for give column: {}&quot;.format(defaultDataSorted))<br/>    <br/>        # Sorted the Table data after apply the selection from dropdown<br/>        webDataAfterSelectSort = actions.getTableData((hp.getTableData()))<br/>        log.info(&quot;WebTable Data after apply the selection from dropdown : {}&quot;.format(webDataAfterSelectSort))<br/>    <br/>        if checkSortByHeader(selectColumn):<br/>            log.info(checkSortByHeader(selectColumn))<br/>            webDataAfterFormate = frameData(webDataAfterSelectSort, getSortedColumnIndex)<br/>            log.info(&quot;WebTable Data After the Formatting for NUMBER OF CASES: {}&quot;.format(webDataAfterFormate))<br/>            assert webDataAfterSelectSort == webDataAfterFormate, &quot;Data mismatch found!&quot;<br/>        else:<br/>&gt;           assert webDataAfterSelectSort == defaultDataSorted, &quot;Data mismatch found!&quot;<br/><span class="error">E           AssertionError: Data mismatch found!</span><br/><span class="error">E           assert [[&#x27;XSS&#x27;, &#x27;298....12&#x27;, &#x27;high&#x27;]] == [[&#x27;Password a....79&#x27;, &#x27;high&#x27;]]</span><br/><span class="error">E             At index 0 diff: [&#x27;XSS&#x27;, &#x27;29850&#x27;, &#x27;2.19&#x27;, &#x27;low&#x27;] != [&#x27;Password attack&#x27;, &#x27;32.85M&#x27;, &#x27;5&#x27;, &#x27;low&#x27;]</span><br/><span class="error">E             Full diff:</span><br/><span class="error">E               [</span><br/><span class="error">E             +  [&#x27;XSS&#x27;, &#x27;29850&#x27;, &#x27;2.19&#x27;, &#x27;low&#x27;],</span><br/><span class="error">E             +  [&#x27;Phishing&#x27;, &#x27;25.12M&#x27;, &#x27;7.18&#x27;, &#x27;low&#x27;],</span><br/><span class="error">E                [&#x27;Password attack&#x27;, &#x27;32.85M&#x27;, &#x27;5&#x27;, &#x27;low&#x27;],</span><br/><span class="error">E             -  [&#x27;Phishing&#x27;, &#x27;25.12M&#x27;, &#x27;7.18&#x27;, &#x27;low&#x27;],...</span><br/><span class="error">E             </span><br/><span class="error">E             ...Full output truncated (7 lines hidden), use &#x27;-vv&#x27; to show</span><br/><br/>tests\test_sortingDataByColumn.py:64: AssertionError<br/> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m test_VelidateSortedData:test_sortingDataByColumn.py:31 Default webTable data without filter: [[&#x27;Man in the Middle&#x27;, &#x27;95k&#x27;, &#x27;8.12&#x27;, &#x27;high&#x27;], [&#x27;Password attack&#x27;, &#x27;32.85M&#x27;, &#x27;5&#x27;, &#x27;low&#x27;], [&#x27;Phishing&#x27;, &#x27;25.12M&#x27;, &#x27;7.18&#x27;, &#x27;low&#x27;], [&#x27;Session hijack&#x27;, &#x27;9024&#x27;, &#x27;5.79&#x27;, &#x27;high&#x27;], [&#x27;SQL Injection&#x27;, &#x27;1.25M&#x27;, &#x27;10.21&#x27;, &#x27;medium&#x27;], [&#x27;XSS&#x27;, &#x27;29850&#x27;, &#x27;2.19&#x27;, &#x27;low&#x27;]]
+[32mINFO    [0m test_VelidateSortedData:test_sortingDataByColumn.py:38 selectColumn: Complexity
+[32mINFO    [0m test_VelidateSortedData:test_sortingDataByColumn.py:44 WebTable headers: [&#x27;NAME&#x27;, &#x27;NUMBER OF CASES&#x27;, &#x27;AVERAGE IMPACT SCORE&#x27;, &#x27;COMPLEXITY&#x27;]
+[32mINFO    [0m test_VelidateSortedData:test_sortingDataByColumn.py:48 get Sorted Column Index: 3
+[32mINFO    [0m test_VelidateSortedData:test_sortingDataByColumn.py:52 get default data after sort for give column: [[&#x27;Password attack&#x27;, &#x27;32.85M&#x27;, &#x27;5&#x27;, &#x27;low&#x27;], [&#x27;Phishing&#x27;, &#x27;25.12M&#x27;, &#x27;7.18&#x27;, &#x27;low&#x27;], [&#x27;XSS&#x27;, &#x27;29850&#x27;, &#x27;2.19&#x27;, &#x27;low&#x27;], [&#x27;SQL Injection&#x27;, &#x27;1.25M&#x27;, &#x27;10.21&#x27;, &#x27;medium&#x27;], [&#x27;Man in the Middle&#x27;, &#x27;95k&#x27;, &#x27;8.12&#x27;, &#x27;high&#x27;], [&#x27;Session hijack&#x27;, &#x27;9024&#x27;, &#x27;5.79&#x27;, &#x27;high&#x27;]]
+[32mINFO    [0m test_VelidateSortedData:test_sortingDataByColumn.py:56 WebTable Data after apply the selection from dropdown : [[&#x27;XSS&#x27;, &#x27;29850&#x27;, &#x27;2.19&#x27;, &#x27;low&#x27;], [&#x27;Phishing&#x27;, &#x27;25.12M&#x27;, &#x27;7.18&#x27;, &#x27;low&#x27;], [&#x27;Password attack&#x27;, &#x27;32.85M&#x27;, &#x27;5&#x27;, &#x27;low&#x27;], [&#x27;SQL Injection&#x27;, &#x27;1.25M&#x27;, &#x27;10.21&#x27;, &#x27;medium&#x27;], [&#x27;Session hijack&#x27;, &#x27;9024&#x27;, &#x27;5.79&#x27;, &#x27;high&#x27;], [&#x27;Man in the Middle&#x27;, &#x27;95k&#x27;, &#x27;8.12&#x27;, &#x27;high&#x27;]]<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_dropDownField.py::Test_ValidateFilterDropdown::test_FilterHeaderText[getData0]</td>
+          <td class="col-duration">0.35</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m test_FilterHeaderText:test_dropDownField.py:19 Filter header text: Sort data<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_dropDownField.py::Test_ValidateFilterDropdown::test_validateTableHeader[getData0]</td>
+          <td class="col-duration">0.06</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m test_validateTableHeader:test_dropDownField.py:31 TableHeader found as expected: [&#x27;NAME&#x27;, &#x27;NUMBER OF CASES&#x27;, &#x27;AVERAGE IMPACT SCORE&#x27;, &#x27;COMPLEXITY&#x27;]<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_dropDownField.py::Test_ValidateFilterDropdown::test_DropdownEnabled[getData0]</td>
+          <td class="col-duration">0.20</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m test_DropdownEnabled:test_dropDownField.py:43 Dropdown enable Number of cases<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_dropDownField.py::Test_ValidateFilterDropdown::test_validateDropdown[getData0]</td>
+          <td class="col-duration">0.10</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m test_validateDropdown:test_dropDownField.py:53 Dropdown list: [&#x27;Name&#x27;, &#x27;Number of cases&#x27;, &#x27;Impact score&#x27;, &#x27;Complexity&#x27;]<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_dropDownField.py::Test_ValidateFilterDropdown::test_selectColumnName[getData0]</td>
+          <td class="col-duration">0.06</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m test_selectColumnName:test_dropDownField.py:62 Select column for apply to sorting!<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_dropDownField.py::Test_ValidateFilterDropdown::test_columnCheck[getData0]</td>
+          <td class="col-duration">0.04</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m test_columnCheck:test_dropDownField.py:74 Element found.<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_validateHomePage.py::Test_ValidateSorting::test_validateClearFlterTextBox[getData0]</td>
+          <td class="col-duration">0.07</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m test_validateClearFlterTextBox:test_validateHomePage.py:22 Textbox is alrady cleared.<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_validateHomePage.py::Test_ValidateSorting::test_validatePageText[getData0]</td>
+          <td class="col-duration">0.05</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m test_validatePageText:test_validateHomePage.py:36 Page text: Cyber attack completely fake statistics<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_validateHomePage.py::Test_ValidateSorting::test_validateHomeTitle[getData0]</td>
+          <td class="col-duration">0.02</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m test_validateHomeTitle:test_validateHomePage.py:47 Page title: simplesite<br/></div></td></tr></tbody></table></body></html>

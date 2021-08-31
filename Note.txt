@@ -1,0 +1,3 @@
+command use to run test:
+
+pytest -v --html=reports\reports.html tests\test_sortingDataByColumn.py
